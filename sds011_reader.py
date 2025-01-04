@@ -5,24 +5,25 @@ import logging
 import serial
 from flask import Flask, jsonify
 
+
 # ----- Logging Setup -----
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ----- Serial Configuration -----
-# Adjust serial_port and baudrate based on your connections and the sensor specs
-serial_port = "/dev/ttyS0"  # Usually this is ttyS0, you may have to use ttyAMA0
-baudrate = 9600 # Usually this is 9600, but check the sensor documentation
+# Use hardcoded port for use_query_mode
+serial_port = "/dev/ttyUSB0" # or whatever you are using such as "/dev/ttyACM0"
+baudrate = 9600  # Usually this is 9600, but check the sensor documentation
 
 # Try creating serial object with error handling
 try:
-    ser = serial.Serial(serial_port, baudrate)
+  ser = serial.Serial(serial_port, baudrate)
 except serial.SerialException as e:
-    logging.error(f"Failed to create serial object: {e}")
-    exit() # Exit if no serial object could be created
+  logging.error(f"Failed to create serial object: {e}")
+  exit() # Exit if no serial object could be created
 
 # ----- Initialize SDS011 -----
 try:
-    sensor = sds011.SDS011(ser)
+    sensor = sds011.SDS011(ser, use_query_mode=True)  # <----- Use serial object AND query mode
     logging.debug("SDS011 Sensor Initialized")
 except Exception as e:
     logging.error(f"Failed to initialize sensor: {e}")
