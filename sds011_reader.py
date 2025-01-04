@@ -4,15 +4,30 @@ import json
 import logging
 import serial
 from flask import Flask, jsonify
-
+import re
 
 # ----- Logging Setup -----
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ----- Serial Configuration -----
-# Use hardcoded port for use_query_mode
-serial_port = "/dev/ttyUSB0" # or whatever you are using such as "/dev/ttyACM0"
-baudrate = 9600  # Usually this is 9600, but check the sensor documentation
+# Find the usb serial port - This pattern may need to be adjusted based on the OS
+usb_pattern = re.compile(r"/dev/ttyUSB\d+")
+
+# Function to find a serial port that matches the USB pattern
+def find_serial_port():
+  for dev in serial.tools.list_ports.comports():
+    if usb_pattern.match(dev.device):
+      return dev.device
+  return None
+
+serial_port = find_serial_port()
+
+if not serial_port:
+    logging.error("Could not find a USB-to-Serial device")
+    exit()
+else:
+    logging.debug(f"Found Serial Port: {serial_port}")
+baudrate = 9600 # Usually this is 9600, but check the sensor documentation
 
 # Try creating serial object with error handling
 try:
@@ -21,23 +36,32 @@ except serial.SerialException as e:
   logging.error(f"Failed to create serial object: {e}")
   exit() # Exit if no serial object could be created
 
+
 # ----- Initialize SDS011 -----
 try:
-    sensor = sds011.SDS011(ser, use_query_mode=True)  # <----- Use serial object AND query mode
-    logging.debug("SDS011 Sensor Initialized")
+  sensor = sds011.SDS011(ser, use_query_mode=True)  # <----- set query mode to true here
+  logging.debug("SDS011 Sensor Initialized")
 except Exception as e:
     logging.error(f"Failed to initialize sensor: {e}")
     exit()
 
+
 def get_sensor_data():
-    """Reads data from the SDS011 sensor."""
+    """Reads data from the SDS011 sensor, controlling sleep mode."""
+    logging.debug("get_sensor_data: Starting")
     try:
-        pm25, pm10 = sensor.query()
-        logging.debug(f"Read data: PM2.5 = {pm25}, PM10 = {pm10}")
+        logging.debug("get_sensor_data: Waking up the sensor")
+        sensor.sleep = False  # Wake up the sensor
+        logging.debug("get_sensor_data: Before sensor.query()")
+        pm25, pm10 = sensor.query() # Get data
+        logging.debug(f"get_sensor_data: After sensor.query() - PM2.5 = {pm25}, PM10 = {pm10}")
         return {"pm25": pm25, "pm10": pm10}
     except Exception as e:
-        logging.error(f"Error reading from sensor: {e}")
-        return None
+      logging.error(f"get_sensor_data: Error reading from sensor: {e}")
+      return None
+    finally:
+        logging.debug("get_sensor_data: Putting sensor to sleep")
+        sensor.sleep = True  # Put sensor back to sleep (always executed)
 
 
 app = Flask(__name__)
@@ -52,6 +76,7 @@ def get_air_quality():
       return jsonify(data), 200
     else:
        return jsonify({"error": "Could not retrieve sensor data"}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
