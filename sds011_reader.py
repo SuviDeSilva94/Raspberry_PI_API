@@ -39,7 +39,7 @@ except serial.SerialException as e:
 
 # ----- Initialize SDS011 -----
 try:
-  sensor = sds011.SDS011(ser, use_query_mode=True)  # <----- set query mode to true here
+  sensor = sds011.SDS011(ser, use_query_mode=True)
   logging.debug("SDS011 Sensor Initialized")
 except Exception as e:
     logging.error(f"Failed to initialize sensor: {e}")
@@ -47,21 +47,29 @@ except Exception as e:
 
 
 def get_sensor_data():
-    """Reads data from the SDS011 sensor, controlling sleep mode."""
+    """Reads data from the SDS011 sensor, controlling sleep mode and handling errors."""
     logging.debug("get_sensor_data: Starting")
     try:
         logging.debug("get_sensor_data: Waking up the sensor")
-        sensor.sleep = False  # Wake up the sensor
+        sensor.sleep = False
         logging.debug("get_sensor_data: Before sensor.query()")
-        pm25, pm10 = sensor.query() # Get data
-        logging.debug(f"get_sensor_data: After sensor.query() - PM2.5 = {pm25}, PM10 = {pm10}")
-        return {"pm25": pm25, "pm10": pm10}
+        query_result = sensor.query() # <----- Get the query result
+        logging.debug(f"get_sensor_data: After sensor.query() - Result = {query_result}")
+
+        if isinstance(query_result, tuple) and len(query_result) == 2: # <----- check if tuple
+            pm25, pm10 = query_result
+            logging.debug(f"get_sensor_data: After sensor.query() - PM2.5 = {pm25}, PM10 = {pm10}")
+            return {"pm25": pm25, "pm10": pm10}
+        else:
+           logging.error(f"get_sensor_data: Query data is not iterable, result = {query_result}")
+           return None
+
     except Exception as e:
-      logging.error(f"get_sensor_data: Error reading from sensor: {e}")
-      return None
+        logging.error(f"get_sensor_data: Error reading from sensor: {e}")
+        return None
     finally:
         logging.debug("get_sensor_data: Putting sensor to sleep")
-        sensor.sleep = True  # Put sensor back to sleep (always executed)
+        sensor.sleep = True
 
 
 app = Flask(__name__)
@@ -76,7 +84,6 @@ def get_air_quality():
       return jsonify(data), 200
     else:
        return jsonify({"error": "Could not retrieve sensor data"}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
